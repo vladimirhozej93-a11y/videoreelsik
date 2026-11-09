@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS leads (
+  id TEXT PRIMARY KEY NOT NULL,
+  owner TEXT NOT NULL,
+  data TEXT NOT NULL,
+  updated TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS leads_owner_updated ON leads(owner, updated DESC);
+CREATE TABLE IF NOT EXISTS login_attempts (
+  key TEXT PRIMARY KEY NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 1,
+  expires INTEGER NOT NULL
+);
