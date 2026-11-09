@@ -15,7 +15,7 @@ function fixture(){
 }
 const lead={name:'Ремонт Москва',niche:'Ремонт',city:'Москва',phone:'+79000000000',site:'example.com',telegram:'@example',whatsapp:'',source:'Telegram',comment:'Первый контакт',reminder:'',service:'Яндекс Директ',status:'Новый',budget:5000,ready:true,history:[]};
 test('unauthorized requests and spoofed ChatGPT headers cannot access data',async()=>{
- const {call}=fixture();for(const method of ['GET','POST','DELETE'])assert.equal((await call('/api/leads',method,method==='GET'?undefined:lead)).status,401);
+ const {call}=fixture();assert.equal((await call('/api/yandex/status')).status,401);assert.equal((await call('/api/yandex/search','POST',{niche:'Ремонт',city:'Москва'})).status,401);for(const method of ['GET','POST','DELETE'])assert.equal((await call('/api/leads',method,method==='GET'?undefined:lead)).status,401);
  assert.equal((await call('/api/leads','GET',undefined,undefined,{'oai-authenticated-user-id':'vladimir','oai-authenticated-user-email':'test@example.com'})).status,401);
 });
 test('login sets a protected session; malformed and forged cookies fail',async()=>{

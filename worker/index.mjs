@@ -1,3 +1,4 @@
+import {yandexStatus,runYandexSearch} from './yandex.mjs';
 const OWNER = 'vladimir';
 const COOKIE = '__Host-leadflow';
 const SESSION_SECONDS = 7 * 24 * 60 * 60;
@@ -61,6 +62,8 @@ async function api(request,env){
  if(path==='/api/logout'&&request.method==='POST')return json({ok:true},200,{'Set-Cookie':`${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`});
  if(!await authenticated(request,env.CRM_PASSWORD))return json({error:'Войдите в CRM'},401);
  if(path==='/api/session'&&request.method==='GET')return json({ok:true});
+ if(path==='/api/yandex/status'&&request.method==='GET')return json(await yandexStatus(env));
+ if(path==='/api/yandex/search'&&request.method==='POST')return json(await runYandexSearch(await readJson(request),env));
  if(path!=='/api/leads')return json({error:'Не найдено'},404);
  if(request.method==='GET'){
   const {results}=await env.DB.prepare('SELECT data FROM leads WHERE owner=? ORDER BY updated DESC').bind(OWNER).all();
