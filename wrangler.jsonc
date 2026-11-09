@@ -13,7 +13,7 @@
   "d1_databases": [{
     "binding": "DB",
     "database_name": "leadflow-db",
-    "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+    "database_id": "d865e8b3-7dcb-4692-bb77-09baffe5bc55",
     "migrations_dir": "migrations"
   }]
 }
