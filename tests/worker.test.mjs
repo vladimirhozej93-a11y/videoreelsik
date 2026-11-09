@@ -1,12 +1,12 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync} from 'node:fs';
 import worker from '../worker/index.mjs';
 const origin='https://crm.example';
 const password='test-only-long-password-36';
 function fixture(){
- const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(new URL('../migrations/0001_initial.sql',import.meta.url),'utf8'));
+ const sql=new DatabaseSync(':memory:');sql.exec(readdirSync(new URL('../migrations',import.meta.url)).filter(name=>name.endsWith('.sql')).sort().map(name=>readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8')).join('\n'));
  const DB={prepare(query){let values=[];return {bind(...args){values=args;return this},async first(){return sql.prepare(query).get(...values)||null},async all(){return {results:sql.prepare(query).all(...values)}},async run(){return sql.prepare(query).run(...values)}}}};
  const env={DB,CRM_PASSWORD:password};
  async function call(path,method='GET',body,cookie,headers={}){return worker.fetch(new Request(origin+path,{method,headers:{Origin:origin,...(body!==undefined?{'Content-Type':'application/json'}:{}),...(cookie?{Cookie:cookie}:{}),...headers},...(body!==undefined?{body:JSON.stringify(body)}:{})}),env)}
@@ -54,3 +54,7 @@ test('missing secrets fail closed and password rotation invalidates old sessions
  delete env.CRM_PASSWORD;assert.equal((await call('/api/leads','GET',undefined,cookie)).status,503);
 });
 test('logout clears the browser cookie',async()=>{const {call,login}=fixture();const response=await call('/api/logout','POST',undefined,await login());assert.equal(response.status,200);assert.ok(response.headers.get('set-cookie').includes('Max-Age=0'))});
+
+test('Yandex identity is preserved and duplicate save opens the existing lead',async()=>{const {call,login}=fixture(),cookie=await login();const first=await call('/api/leads','POST',{...lead,yandexId:'12345'},cookie);assert.equal(first.status,200);const saved=await first.json();assert.equal(saved.yandexId,'12345');const duplicate=await call('/api/leads','POST',{...lead,name:'Updated import',yandexId:'12345'},cookie);assert.equal(duplicate.status,409);const response=await duplicate.json();assert.equal(response.existing.id,saved.id);assert.equal(response.existing.name,lead.name);assert.equal((await (await call('/api/leads','GET',undefined,cookie)).json()).length,1);assert.equal((await call('/api/leads','POST',{...saved,comment:'Manual edit'},cookie)).status,200)});
+test('Yandex unique index is per owner and blocks duplicate concurrent records',async()=>{const {sql}=fixture();const row=JSON.stringify({...lead,yandexId:'same-id'});sql.prepare('INSERT INTO leads VALUES (?,?,?,?)').run('one','vladimir',row,'now');assert.throws(()=>sql.prepare('INSERT INTO leads VALUES (?,?,?,?)').run('two','vladimir',row,'now'));sql.prepare('INSERT INTO leads VALUES (?,?,?,?)').run('three','other',row,'now');assert.equal(sql.prepare('SELECT COUNT(*) n FROM leads').get().n,2)});
+test('invalid Yandex identities are rejected',async()=>{const {call,login}=fixture(),cookie=await login();for(const yandexId of ['',null,12,'x'.repeat(101)])assert.equal((await call('/api/leads','POST',{...lead,yandexId},cookie)).status,400)});

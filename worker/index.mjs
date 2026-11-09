@@ -38,7 +38,8 @@ export function validateLead(input){
  if(!statuses.includes(input.status)||typeof input.ready!=='boolean'||!Number.isFinite(input.budget)||input.budget<5000||input.budget>1e12)throw {status:400,message:'Укажите статус и бюджет от 5 000 ₽'};
  if(input.id!==undefined&&(typeof input.id!=='string'||input.id.length>100))throw {status:400,message:'Некорректный ID'};
  if(input.history!==undefined&&(!Array.isArray(input.history)||input.history.length>200||input.history.some(x=>typeof x!=='string'||x.length>1000)))throw {status:400,message:'Некорректная история'};
- return {...result,id:input.id?.trim()||crypto.randomUUID(),status:input.status,ready:input.ready,budget:input.budget,history:input.history||[],updated:new Date().toISOString()};
+ if(input.yandexId!==undefined&&(typeof input.yandexId!=='string'||!input.yandexId.trim()||input.yandexId.length>100))throw {status:400,message:'Некорректный ID организации Яндекса'};
+ return {...result,...(input.yandexId?{yandexId:input.yandexId.trim()}:{}),id:input.id?.trim()||crypto.randomUUID(),status:input.status,ready:input.ready,budget:input.budget,history:input.history||[],updated:new Date().toISOString()};
 }
 async function api(request,env){
  const url=new URL(request.url),path=url.pathname;
@@ -72,8 +73,13 @@ async function api(request,env){
  if(request.method==='POST'){
   const lead=validateLead(await readJson(request));
   // Keep ownership in the conflict clause: existing foreign rows cannot be overwritten.
-  const saved=await env.DB.prepare('INSERT INTO leads (id,owner,data,updated) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,updated=excluded.updated WHERE leads.owner=excluded.owner RETURNING id').bind(lead.id,OWNER,JSON.stringify(lead),lead.updated).first();
-  return saved?json(lead):json({error:'Нет доступа к этой карточке'},403);
+  const duplicate=async()=>lead.yandexId?await env.DB.prepare("SELECT data FROM leads WHERE owner=? AND json_extract(data,'$.yandexId')=? AND id<>? LIMIT 1").bind(OWNER,lead.yandexId,lead.id).first():null;
+  const existing=await duplicate();if(existing)return json({error:'Эта компания уже есть в лидах',existing:JSON.parse(existing.data)},409);
+  try{
+   const saved=await env.DB.prepare('INSERT INTO leads (id,owner,data,updated) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,updated=excluded.updated WHERE leads.owner=excluded.owner RETURNING id').bind(lead.id,OWNER,JSON.stringify(lead),lead.updated).first();
+   return saved?json(lead):json({error:'Нет доступа к этой карточке'},403);
+  }catch(error){const row=await duplicate();if(row)return json({error:'Эта компания уже есть в лидах',existing:JSON.parse(row.data)},409);throw error;}
+
  }
  if(request.method==='DELETE'){
   const input=await readJson(request);if(typeof input?.id!=='string'||!input.id||input.id.length>100)return json({error:'Некорректный ID'},400);
